@@ -1,0 +1,42 @@
+H# Maven / Build
+ target/
+ build/
+
+ # Wrapper
+ .mvn/wrapper/maven-wrapper.jar
+
+ # Logs
+ *.log
+
+ # OS
+ .DS_Store
+ Thumbs.db
+
+ # IntelliJ
+ .idea/
+ *.iml
+ *.iws
+ *.ipr
+
+ # Eclipse / STS
+ .apt_generated
+ .classpath
+ .factorypath
+ .project
+ .settings
+ .springBeans
+ .sts4-cache
+
+ # NetBeans
+ /nbproject/private/
+ /nbbuild/
+ /dist/
+ /nbdist/
+ /.nb-gradle/
+
+ # VS Code
+ .vscode/
+
+ # Environment / secrets
+ .env
+ application-dev.properties
