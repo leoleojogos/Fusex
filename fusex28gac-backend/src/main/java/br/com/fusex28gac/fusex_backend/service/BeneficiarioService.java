@@ -76,7 +76,7 @@ public class BeneficiarioService {
 
         Usuario usuarioValidador = userRepository.findById(request.getValidadoPorUserId())
                 .orElseThrow(
-                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario validador não encontrado"));
+                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário validador não encontrado"));
 
         beneficiario.setStatusCadastro(request.getAprovado() ? StatusCadastro.VALIDADO : StatusCadastro.REJEITADO);
         beneficiario.setDataValidacao(LocalDate.now());
