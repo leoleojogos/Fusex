@@ -24,7 +24,7 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                    .requestMatchers("/error").permitAll()
+                    .requestMatchers("/error", "/favicon.ico").permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/beneficiarios/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/usuarios").permitAll()
@@ -44,6 +44,12 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/agendamentos")
                         .hasAnyRole("ADMIN", "OPERADOR_FUSEX")
+
+                        .requestMatchers(HttpMethod.GET, "/agendamentos/medico/*")
+                        .hasAnyRole("ADMIN", "OPERADOR_FUSEX", "MEDICO")
+
+                        .requestMatchers(HttpMethod.PATCH, "/agendamentos/*/finalizar")
+                        .hasAnyRole("ADMIN", "OPERADOR_FUSEX", "MEDICO")
 
                         .requestMatchers(HttpMethod.GET, "/agendamentos/**")
                         .hasAnyRole("ADMIN", "OPERADOR_FUSEX")

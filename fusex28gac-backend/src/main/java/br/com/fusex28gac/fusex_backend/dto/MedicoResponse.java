@@ -11,6 +11,7 @@ public class MedicoResponse {
     private Long id;
     private String nome;
     private String crm;
+    private String login;
     private EspecialidadeMedica especialidade;
     private Boolean ativo;
 

@@ -13,6 +13,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+import br.com.fusex28gac.fusex_backend.model.EspecialidadeMedica;
+import br.com.fusex28gac.fusex_backend.model.Medico;
+import br.com.fusex28gac.fusex_backend.repository.MedicoRepository;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+
 @Component
 public class DatabaseInitializer implements CommandLineRunner {
 
@@ -23,10 +29,22 @@ public class DatabaseInitializer implements CommandLineRunner {
     private UsuarioRepository usuarioRepository;
 
     @Autowired
+    private MedicoRepository medicoRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Override
     public void run(String... args) throws Exception {
+        // Remove a restrição CHECK antiga da tabela usuarios caso tenha sido criada pelo Hibernate anteriormente
+        try {
+            jdbcTemplate.execute("ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_perfil_check");
+        } catch (Exception e) {
+            // Ignora caso a tabela ou constraint não exista
+        }
         // Valida beneficiários pendentes
         List<Beneficiario> beneficiarios = beneficiarioRepository.findAll();
         boolean updatedBeneficiarios = false;
@@ -68,5 +86,45 @@ public class DatabaseInitializer implements CommandLineRunner {
                 System.out.println(">>> [DatabaseInitializer] Senhas em texto plano foram atualizadas no banco.");
             }
         }
+
+        // Se a tabela de médicos estiver vazia, cria um médico demonstrativo inicial
+        if (medicoRepository.count() == 0) {
+            Medico m = new Medico();
+            m.setNome("Dr. Jorge Silva");
+            m.setCrm("123456");
+            m.setEspecialidade(EspecialidadeMedica.CLINICO_GERAL);
+            m.setAtivo(true);
+            medicoRepository.save(m);
+            System.out.println(">>> [DatabaseInitializer] Criado médico demonstrativo inicial: Dr. Jorge Silva | CRM: 123456");
+        }
+
+        // Garante que todo médico cadastrado possua uma conta de usuário vinculada (login = Nome gerado, senha = CRM)
+        List<Medico> medicos = medicoRepository.findAll();
+        for (Medico m : medicos) {
+            String loginDesejado = gerarLoginPeloNome(m.getNome(), m.getCrm());
+            String senhaInicial = m.getCrm().trim();
+
+            Usuario u = usuarioRepository.findByMedicoId(m.getId())
+                    .orElseGet(() -> usuarioRepository.findByLogin(loginDesejado).orElse(new Usuario()));
+
+            u.setNome(m.getNome());
+            u.setLogin(loginDesejado);
+            u.setSenhaHash(passwordEncoder.encode(senhaInicial));
+            u.setPerfil(PerfilUsuario.MEDICO);
+            u.setMedico(m);
+            u.setAtivo(m.getAtivo());
+            usuarioRepository.save(u);
+            System.out.println(">>> [DatabaseInitializer] Conta do médico '" + m.getNome() + "' pronta -> Usuário/Login: '" + loginDesejado + "' | Senha (CRM): '" + senhaInicial + "'");
+        }
+    }
+
+    private String gerarLoginPeloNome(String nome, String crm) {
+        if (nome == null || nome.isBlank()) return crm.trim();
+        String limpo = java.text.Normalizer.normalize(nome, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase()
+                .replaceAll("^(dr\\.?|dra\\.?)\\s*", "")
+                .replaceAll("[^a-z0-9]", "");
+        return limpo.isBlank() ? crm.trim() : limpo;
     }
 }

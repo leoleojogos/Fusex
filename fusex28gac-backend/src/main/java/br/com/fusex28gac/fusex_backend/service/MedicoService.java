@@ -11,13 +11,26 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+import br.com.fusex28gac.fusex_backend.model.PerfilUsuario;
+import br.com.fusex28gac.fusex_backend.model.Usuario;
+import br.com.fusex28gac.fusex_backend.repository.UsuarioRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 @Service
 public class MedicoService {
 
     private final MedicoRepository medicoRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public MedicoService (MedicoRepository medicoRepository) {
+    public MedicoService(
+            MedicoRepository medicoRepository,
+            UsuarioRepository usuarioRepository,
+            PasswordEncoder passwordEncoder
+    ) {
         this.medicoRepository = medicoRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public MedicoResponse criar(MedicoRequest request) {
@@ -29,13 +42,36 @@ public class MedicoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "CRM ja cadastrado");
         }
 
+        String loginDesejado = (request.getLogin() != null && !request.getLogin().isBlank())
+                ? request.getLogin().trim()
+                : gerarLoginPeloNome(request.getNome(), crm);
+        String senhaDesejada = (request.getSenha() != null && !request.getSenha().isBlank())
+                ? request.getSenha()
+                : crm;
+
+        if (usuarioRepository.findByLogin(loginDesejado).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Login de acesso '" + loginDesejado + "' já está em uso.");
+        }
+
         Medico medico = new Medico();
         medico.setNome(request.getNome().trim());
         medico.setCrm(crm);
         medico.setEspecialidade(request.getEspecialidade());
         medico.setAtivo(request.getAtivo() == null ? true : request.getAtivo());
 
-        return toResponse(medicoRepository.save(medico));
+        medico = medicoRepository.save(medico);
+
+        // Criar usuário para acesso do médico
+        Usuario usuario = new Usuario();
+        usuario.setNome(medico.getNome());
+        usuario.setLogin(loginDesejado);
+        usuario.setSenhaHash(passwordEncoder.encode(senhaDesejada));
+        usuario.setPerfil(PerfilUsuario.MEDICO);
+        usuario.setMedico(medico);
+        usuario.setAtivo(medico.getAtivo());
+        usuarioRepository.save(usuario);
+
+        return toResponse(medico);
     }
 
     public List<MedicoResponse> listarTodos() {
@@ -78,7 +114,26 @@ public class MedicoService {
         medico.setEspecialidade(request.getEspecialidade());
         medico.setAtivo(request.getAtivo() == null ? true : request.getAtivo());
 
-        return toResponse(medicoRepository.save(medico));
+        medico = medicoRepository.save(medico);
+
+        // Atualizar usuario correspondente caso exista
+        Usuario usuario = usuarioRepository.findByMedicoId(id).orElse(null);
+        if (usuario != null) {
+            usuario.setNome(medico.getNome());
+            usuario.setAtivo(medico.getAtivo());
+
+            if (request.getLogin() != null && !request.getLogin().isBlank()) {
+                usuario.setLogin(request.getLogin().trim());
+            }
+
+            if (request.getSenha() != null && !request.getSenha().isBlank()) {
+                usuario.setSenhaHash(passwordEncoder.encode(request.getSenha()));
+            }
+
+            usuarioRepository.save(usuario);
+        }
+
+        return toResponse(medico);
     }
 
     public MedicoResponse desativar(Long id) {
@@ -86,8 +141,14 @@ public class MedicoService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Medico não encontrado"));
 
         medico.setAtivo(false);
+        medicoRepository.save(medico);
 
-        return toResponse(medicoRepository.save(medico));
+        usuarioRepository.findByMedicoId(id).ifPresent(u -> {
+            u.setAtivo(false);
+            usuarioRepository.save(u);
+        });
+
+        return toResponse(medico);
     }
 
     private void validarRequest(MedicoRequest request) {
@@ -108,11 +169,26 @@ public class MedicoService {
         return crm.trim().toUpperCase();
     }
 
+    private String gerarLoginPeloNome(String nome, String crm) {
+        if (nome == null || nome.isBlank()) return crm.trim();
+        String limpo = java.text.Normalizer.normalize(nome, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase()
+                .replaceAll("^(dr\\.?|dra\\.?)\\s*", "")
+                .replaceAll("[^a-z0-9]", "");
+        return limpo.isBlank() ? crm.trim() : limpo;
+    }
+
     private MedicoResponse toResponse(Medico medico) {
+        String login = usuarioRepository.findByMedicoId(medico.getId())
+                .map(Usuario::getLogin)
+                .orElse(medico.getCrm());
+
         return new MedicoResponse(
                 medico.getId(),
                 medico.getNome(),
                 medico.getCrm(),
+                login,
                 medico.getEspecialidade(),
                 medico.getAtivo()
         );

@@ -28,6 +28,7 @@ import AdminBeneficiariosScreen from './screens/AdminBeneficiariosScreen.jsx';
 import AdminMedicosScreen from './screens/AdminMedicosScreen.jsx';
 import AdminAgendamentosScreen from './screens/AdminAgendamentosScreen.jsx';
 import AdminHorariosScreen from './screens/AdminHorariosScreen.jsx';
+import MedicoDashboardScreen from './screens/MedicoDashboardScreen.jsx';
 
 import * as api from './services/api.js';
 
@@ -45,6 +46,10 @@ const ADMIN_MENU = [
   { id: 'admin_medicos', label: 'Gerenciar Médicos', icon: Stethoscope },
   { id: 'admin_agendamentos', label: 'Todos Agendamentos', icon: CalendarDays },
   { id: 'admin_horarios', label: 'Gerenciar Horários', icon: CalendarRange },
+];
+
+const MEDICO_MENU = [
+  { id: 'medico_dashboard', label: 'Minhas Consultas', icon: CalendarDays },
 ];
 
 const viewAnimation = {
@@ -85,7 +90,11 @@ export default function SighWebPortal() {
     return authUser?.perfil === 'ADMIN' || authUser?.perfil === 'OPERADOR_FUSEX';
   }, [authUser]);
 
-  const currentMenu = isAdmin ? ADMIN_MENU : MENU;
+  const isMedico = useMemo(() => {
+    return authUser?.perfil === 'MEDICO';
+  }, [authUser]);
+
+  const currentMenu = isMedico ? MEDICO_MENU : (isAdmin ? ADMIN_MENU : MENU);
 
   const userInitials = useMemo(() => {
     if (!authUser?.nomeCompleto) return 'US';
@@ -181,6 +190,28 @@ export default function SighWebPortal() {
     }
   };
 
+  const loadMedicoAppointments = async (medicoId, credentials) => {
+    setAppointmentsError('');
+    try {
+      const data = await api.listAppointmentsByMedico(medicoId, credentials);
+      setAppointments(data);
+    } catch (error) {
+      setAppointmentsError(error.message || 'Não foi possível carregar as consultas do médico.');
+    }
+  };
+
+  const handleFinalizarMedicoAppointment = async (id, status, observacao) => {
+    if (!authUser || !authCredentials) return;
+    setAppointmentsError('');
+    try {
+      await api.finalizarAppointment(id, status, observacao, authCredentials);
+      await loadMedicoAppointments(authUser.id, authCredentials);
+    } catch (error) {
+      setAppointmentsError(error.message || 'Erro ao atualizar atendimento.');
+      throw error;
+    }
+  };
+
   // Load Admin Data
   const loadAdminData = async (credentials) => {
     if (!credentials) return;
@@ -214,11 +245,18 @@ export default function SighWebPortal() {
       setIsLoggedIn(true);
 
       const isUserAdmin = user.perfil === 'ADMIN' || user.perfil === 'OPERADOR_FUSEX';
+      const isUserMedico = user.perfil === 'MEDICO';
+
       if (isUserAdmin) {
         const credentials = { login: payload.login, senha: payload.senha };
         setAuthCredentials(credentials);
         setActiveView('admin_dashboard');
         await loadAdminData(credentials);
+      } else if (isUserMedico) {
+        const credentials = { login: payload.login, senha: payload.senha };
+        setAuthCredentials(credentials);
+        setActiveView('medico_dashboard');
+        await loadMedicoAppointments(user.id, credentials);
       } else {
         setAuthCredentials(null);
         setActiveView('dashboard');
@@ -375,16 +413,20 @@ export default function SighWebPortal() {
   };
 
   useEffect(() => {
-    if (isLoggedIn && !isAdmin) {
-      if (activeView === 'book') {
-        loadAvailableSlots();
-        loadMedicosForPatient();
-      } else if (activeView === 'dashboard' || activeView === 'appointments' || activeView === 'cancel') {
-        loadAppointments(authUser.id);
-        loadAvailableSlots();
+    if (isLoggedIn) {
+      if (isMedico && activeView === 'medico_dashboard') {
+        loadMedicoAppointments(authUser.id, authCredentials);
+      } else if (!isAdmin && !isMedico) {
+        if (activeView === 'book') {
+          loadAvailableSlots();
+          loadMedicosForPatient();
+        } else if (activeView === 'dashboard' || activeView === 'appointments' || activeView === 'cancel') {
+          loadAppointments(authUser.id);
+          loadAvailableSlots();
+        }
       }
     }
-  }, [isLoggedIn, isAdmin, activeView]);
+  }, [isLoggedIn, isAdmin, isMedico, activeView]);
 
   const adminStats = useMemo(() => {
     const totalBeneficiarios = beneficiarios.length;
@@ -450,7 +492,7 @@ export default function SighWebPortal() {
             <div className="user-avatar">{userInitials}</div>
             <div>
               <p className="user-name">{authUser?.nomeCompleto || 'Usuario'}</p>
-              <p className="user-id">{isAdmin ? 'ADMINISTRADOR' : `ID: ${authUser?.id || '-'}`}</p>
+              <p className="user-id">{isAdmin ? 'ADMINISTRADOR' : (isMedico ? 'MÉDICO' : `ID: ${authUser?.id || '-'}`)}</p>
             </div>
           </div>
 
@@ -481,8 +523,8 @@ export default function SighWebPortal() {
             <Menu size={22} />
           </button>
           <div className="topbar-info">
-            <h1>{isAdmin ? 'Painel Administrativo' : 'Painel do Paciente'}</h1>
-            <p>{isAdmin ? 'Gestão operacional de pacientes, médicos, consultas e grade de horários.' : 'Modulo paciente online com fluxo modernizado e navegacao funcional.'}</p>
+            <h1>{isAdmin ? 'Painel Administrativo' : (isMedico ? 'Painel do Médico' : 'Painel do Paciente')}</h1>
+            <p>{isAdmin ? 'Gestão operacional de pacientes, médicos, consultas e grade de horários.' : (isMedico ? 'Gestão de atendimentos, prontuário resumido e acompanhamento de pacientes.' : 'Modulo paciente online com fluxo modernizado e navegacao funcional.')}</p>
           </div>
           <div className="status-pill">
             <Activity size={16} />
@@ -614,6 +656,18 @@ export default function SighWebPortal() {
                 formatDateTime={formatDateTime}
                 isLoading={adminLoading}
                 errorMessage={adminError}
+              />
+            </motion.section>
+          )}
+
+          {/* Doctor Views */}
+          {isMedico && activeView === 'medico_dashboard' && (
+            <motion.section key="medico_dashboard" {...viewAnimation}>
+              <MedicoDashboardScreen
+                appointments={appointments}
+                formatDateTime={formatDateTime}
+                onFinalizarAppointment={handleFinalizarMedicoAppointment}
+                errorMessage={appointmentsError}
               />
             </motion.section>
           )}

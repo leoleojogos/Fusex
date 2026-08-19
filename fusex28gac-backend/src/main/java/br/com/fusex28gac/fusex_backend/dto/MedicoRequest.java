@@ -7,6 +7,8 @@ import lombok.Setter;
 @Getter
 @Setter
 public class MedicoRequest {
+    private String login;
+    private String senha;
     private String nome;
     private String crm;
     private EspecialidadeMedica especialidade;

@@ -23,8 +23,14 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Usuario usuario = usuarioRepository.findByLogin(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuario não encontrado"));
+        String cleanName = username != null ? username.trim() : "";
+        Usuario usuario = usuarioRepository.findByLogin(cleanName)
+                .orElseGet(() -> usuarioRepository.findAll().stream()
+                        .filter(u -> u.getLogin().equalsIgnoreCase(cleanName) ||
+                                     (u.getMedico() != null && u.getMedico().getCrm().equalsIgnoreCase(cleanName)))
+                        .findFirst()
+                        .orElseThrow(() -> new UsernameNotFoundException("Usuario não encontrado"))
+                );
 
         if(Boolean.FALSE.equals(usuario.getAtivo())) {
             throw new UsernameNotFoundException("Usuario inativo");

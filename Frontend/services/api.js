@@ -13,27 +13,32 @@ function buildAuthHeader(login, senha) {
 async function readErrorMessage(response) {
   try {
     const data = await response.json();
-    if (data && typeof data.message === 'string' && data.message) {
-      return data.message;
+    if (data) {
+      if (typeof data.message === 'string' && data.message && data.message !== 'No message available') {
+        return data.message;
+      }
+      if (typeof data.error === 'string' && data.error) {
+        return data.error;
+      }
     }
   } catch (error) {
     // Ignore JSON parse errors.
   }
 
   if (response.status === 400) {
-    return 'Dados inválidos. Verifique os campos digitados.';
+    return 'Dados inválidos ou requisição incorreta. Verifique os dados.';
   }
   if (response.status === 401) {
-    return 'Senha incorreta.';
+    return 'Senha incorreta ou acesso não autorizado.';
   }
   if (response.status === 403) {
-    return 'Cadastro inativo ou pendente de validação pelo FUSEX.';
+    return 'Cadastro inativo ou sem permissão para esta ação.';
   }
   if (response.status === 404) {
-    return 'Usuário não cadastrado ou não encontrado.';
+    return 'Usuário, CRM ou documento não encontrado. Verifique se o médico está cadastrado no painel Admin.';
   }
   if (response.status === 409) {
-    return 'Usuário ou CPF já cadastrado.';
+    return 'Conflito: Dado (CPF, CRM ou Login) já cadastrado.';
   }
 
   return response.statusText || 'Erro inesperado';
@@ -126,4 +131,17 @@ export function bloquearIntervalo(payload, auth) {
 
 export function listAllSlots(auth) {
   return request('/horarios', { auth });
+}
+
+export function listAppointmentsByMedico(medicoId, auth) {
+  return request(`/agendamentos/medico/${medicoId}`, { auth });
+}
+
+export function finalizarAppointment(id, status, observacao, auth) {
+  const query = status ? `?status=${status}` : '';
+  return request(`/agendamentos/${id}/finalizar${query}`, {
+    method: 'PATCH',
+    body: { observacao: observacao || '' },
+    auth,
+  });
 }

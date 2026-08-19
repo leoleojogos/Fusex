@@ -149,14 +149,45 @@ public class AgendamentoService {
     }
 
     public List<AgendamentoResponse> listarPorBeneficiario(Long beneficiarioId) {
-        if (!beneficiarioRepository.existsById(beneficiarioId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiario nao encontrado");
+        if (beneficiarioId == null || !beneficiarioRepository.existsById(beneficiarioId)) {
+            return List.of();
         }
 
         return agendamentoRepository.findByBeneficiarioId(beneficiarioId)
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    public List<AgendamentoResponse> listarPorMedico(Long medicoId) {
+        if (medicoId == null || !medicoRepository.existsById(medicoId)) {
+            return List.of();
+        }
+
+        return agendamentoRepository.findByMedicoId(medicoId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional
+    public AgendamentoResponse finalizar(Long id, StatusAgendamento status, String observacao) {
+        Agendamento agendamento = agendamentoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agendamento nao encontrado"));
+
+        if (agendamento.getStatus() == StatusAgendamento.CANCELADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agendamento cancelado nao pode ser alterado");
+        }
+
+        if (status != null) {
+            agendamento.setStatus(status);
+        }
+
+        if (observacao != null) {
+            agendamento.setObservacao(observacao);
+        }
+
+        return toResponse(agendamentoRepository.save(agendamento));
     }
 
     private AgendamentoResponse toResponse(Agendamento agendamento) {

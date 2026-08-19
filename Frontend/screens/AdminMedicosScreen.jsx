@@ -54,11 +54,11 @@ export default function AdminMedicosScreen({
             </div>
 
             <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600' }}>CRM</label>
+              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600' }}>CRM (Código Registro)</label>
               <input
                 type="text"
                 required
-                placeholder="Ex: 123456/SP"
+                placeholder="Ex: 123456"
                 value={crm}
                 onChange={(e) => setCrm(e.target.value)}
                 style={{
@@ -68,6 +68,9 @@ export default function AdminMedicosScreen({
                   borderRadius: '8px',
                 }}
               />
+              <small style={{ color: '#56738f', display: 'block', marginTop: '6px' }}>
+                O login do médico é o <strong>Nome</strong> (ou o CRM) e a senha é o <strong>CRM</strong>.
+              </small>
             </div>
 
             <div>
@@ -90,7 +93,7 @@ export default function AdminMedicosScreen({
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                Salvar
+                Salvar Médico
               </button>
               <button
                 type="button"
@@ -109,7 +112,7 @@ export default function AdminMedicosScreen({
         <div className="panel-title-row">
           <div>
             <h3>Corpo Clínico (Médicos)</h3>
-            <p className="empty-hint" style={{ marginTop: '4px' }}>Profissionais cadastrados no sistema.</p>
+            <p className="empty-hint" style={{ marginTop: '4px' }}>Profissionais cadastrados e seus logins de acesso ao sistema.</p>
           </div>
           {!showAddForm && (
             <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
@@ -162,6 +165,12 @@ export default function AdminMedicosScreen({
                   <div>
                     <h4 style={{ margin: 0, fontWeight: '600', color: 'var(--text)' }}>{m.nome}</h4>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'block' }}>CRM: {m.crm}</span>
+                    <span style={{ fontSize: '0.8rem', color: '#1f7ec8', fontWeight: '600', display: 'block' }}>
+                      Usuário: <code>{m.login || m.nome}</code> (ou CRM)
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: '600', display: 'block' }}>
+                      Senha: <code>{m.crm}</code>
+                    </span>
                     <span
                       style={{
                         fontSize: '0.75rem',

@@ -28,4 +28,8 @@ public class Usuario {
     @Column(nullable = false)
     private Boolean ativo = true;
 
+    @OneToOne
+    @JoinColumn(name = "medico_id")
+    private Medico medico;
+
 }

@@ -2,6 +2,7 @@ package br.com.fusex28gac.fusex_backend.service;
 
 import br.com.fusex28gac.fusex_backend.dto.LoginResponse;
 import br.com.fusex28gac.fusex_backend.model.Beneficiario;
+import br.com.fusex28gac.fusex_backend.model.PerfilUsuario;
 import br.com.fusex28gac.fusex_backend.model.StatusCadastro;
 import br.com.fusex28gac.fusex_backend.model.Usuario;
 import br.com.fusex28gac.fusex_backend.repository.BeneficiarioRepository;
@@ -26,23 +27,49 @@ public class AuthService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public LoginResponse login(String login, String senha){
         if (login == null || login.isBlank() || senha == null || senha.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe login e senha");
         }
 
-        // Primeiro, verifica se é um usuário do sistema (Admin / Operador)
-        Optional<Usuario> usuarioOpt = usuarioRepository.findByLogin(login);
+        String loginLimpo = login.trim();
+        String senhaLimpa = senha.trim();
+        String loginNumerico = loginLimpo.replaceAll("\\D", "");
+
+        // Primeiro, verifica se é um usuário do sistema (Admin / Operador / Medico)
+        Optional<Usuario> usuarioOpt = usuarioRepository.findByLogin(loginLimpo);
+        if (usuarioOpt.isEmpty()) {
+            usuarioOpt = usuarioRepository.findAll().stream()
+                    .filter(u -> {
+                        if (u.getLogin() != null && u.getLogin().equalsIgnoreCase(loginLimpo)) return true;
+                        if (u.getMedico() != null && u.getMedico().getCrm() != null) {
+                            String crm = u.getMedico().getCrm();
+                            if (crm.equalsIgnoreCase(loginLimpo)) return true;
+                            if (!loginNumerico.isBlank() && crm.replaceAll("\\D", "").equals(loginNumerico)) return true;
+                        }
+                        return false;
+                    })
+                    .findFirst();
+        }
         if (usuarioOpt.isPresent()) {
             Usuario usuario = usuarioOpt.get();
-            if (!passwordEncoder.matches(senha, usuario.getSenhaHash())) {
+            boolean senhaOk = passwordEncoder.matches(senha, usuario.getSenhaHash()) ||
+                              passwordEncoder.matches(senhaLimpa, usuario.getSenhaHash());
+            if (!senhaOk) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Senha inválida");
             }
             if (Boolean.FALSE.equals(usuario.getAtivo())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cadastro inativo");
             }
+            Long idRetorno = (usuario.getPerfil() == PerfilUsuario.MEDICO && usuario.getMedico() != null)
+                    ? usuario.getMedico().getId()
+                    : usuario.getId();
+
+            System.out.println(">>> [AuthService] Login efetuado com SUCESSO! Nome: " + usuario.getNome() + " | Perfil: " + usuario.getPerfil() + " | Retorno ID: " + idRetorno);
+
             return new LoginResponse(
-                    usuario.getId(),
+                    idRetorno,
                     usuario.getNome(),
                     StatusCadastro.VALIDADO,
                     usuario.getPerfil().name()
@@ -51,54 +78,39 @@ public class AuthService {
 
         // Se não for usuário do sistema, tenta encontrar como Beneficiário (Paciente)
         String documento = normalizarDocumento(login);
-        if (documento == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe um documento válido ou usuário cadastrado");
+        if (documento != null) {
+            Optional<Beneficiario> user = repository.findByCpfOrPreccp(documento, documento);
+            if (user.isPresent()) {
+                Beneficiario beneficiario = user.get();
+                validarSenha(beneficiario, senha);
+
+                StatusCadastro status = beneficiario.getStatusCadastro();
+                if (status == StatusCadastro.PENDENTE_VALIDACAO) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Seu cadastro foi recebido e ainda aguarda validação pelo FUSEX. Tente novamente após a aprovação");
+                }
+                if (status == StatusCadastro.REJEITADO) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Seu cadastro não foi aprovado. Entre em contato com o atendimento para mais informações");
+                }
+                if (status == StatusCadastro.INATIVO || Boolean.FALSE.equals(beneficiario.getAtivo())) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Cadastro inativo. Procure o FUSEX para regularizar o acesso.");
+                }
+                if (status != StatusCadastro.VALIDADO) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cadastro ainda não validado pelo FUSEX");
+                }
+
+                return new LoginResponse(
+                        beneficiario.getId(),
+                        beneficiario.getNomeCompleto(),
+                        beneficiario.getStatusCadastro(),
+                        "PACIENTE"
+                );
+            }
         }
 
-        Optional<Beneficiario> user = repository.findByCpfOrPreccp(documento, documento);
-
-        if(user.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado");
-        }
-
-        Beneficiario beneficiario = user.get();
-
-        validarSenha(beneficiario, senha);
-
-        StatusCadastro status = beneficiario.getStatusCadastro();
-
-        if (status == StatusCadastro.PENDENTE_VALIDACAO) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Seu cadastro foi recebido e ainda aguarda validação pelo FUSEX. Tente novamente após a aprovação"
-            );
-        }
-
-        if(status == StatusCadastro.REJEITADO) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Seu cadastro não foi aprovado. Entre em contato com o atendimento para mais informações"
-            );
-        }
-
-        if (status == StatusCadastro.INATIVO) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Cadastro inativo. Procure o FUSEX para regularizar o acesso."
-            );
-        }
-
-        if (Boolean.FALSE.equals(beneficiario.getAtivo())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cadastro inativo");
-        }
-
-        if (beneficiario.getStatusCadastro() != StatusCadastro.VALIDADO) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cadastro ainda não validado pelo FUSEX");
-        }
-
-        return new LoginResponse(
-                beneficiario.getId(),
-                beneficiario.getNomeCompleto(),
-                beneficiario.getStatusCadastro(),
-                "PACIENTE"
-        );
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário ou documento não encontrado");
     }
 
     private void validarSenha(Beneficiario beneficiario, String senha){

@@ -1,5 +1,6 @@
 package br.com.fusex28gac.fusex_backend.controller;
 
+import br.com.fusex28gac.fusex_backend.model.StatusAgendamento;
 import br.com.fusex28gac.fusex_backend.dto.AgendamentoRequest;
 import br.com.fusex28gac.fusex_backend.dto.AgendamentoResponse;
 import br.com.fusex28gac.fusex_backend.service.AgendamentoService;
@@ -8,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/agendamentos")
@@ -39,6 +41,11 @@ public class AgendamentoController {
         return ResponseEntity.ok(agendamentoService.listarPorBeneficiario(beneficiarioId));
     }
 
+    @GetMapping("/medico/{medicoId}")
+    public ResponseEntity<List<AgendamentoResponse>> listarPorMedico(@PathVariable Long medicoId) {
+        return ResponseEntity.ok(agendamentoService.listarPorMedico(medicoId));
+    }
+
     @PatchMapping("/{id}/cancelamento")
     public ResponseEntity<AgendamentoResponse> cancelar(@PathVariable Long id) {
         return ResponseEntity.ok(agendamentoService.cancelar(id));
@@ -47,5 +54,14 @@ public class AgendamentoController {
     @PatchMapping("/{id}/remarcacao")
     public ResponseEntity<AgendamentoResponse> remarcar(@PathVariable Long id, @RequestBody AgendamentoRequest request) {
         return ResponseEntity.ok(agendamentoService.remarcar(id, request));
+    }
+
+    @PatchMapping("/{id}/finalizar")
+    public ResponseEntity<AgendamentoResponse> finalizar(
+            @PathVariable Long id,
+            @RequestParam(required = false) StatusAgendamento status,
+            @RequestBody(required = false) Map<String, String> body) {
+        String observacao = body != null ? body.get("observacao") : null;
+        return ResponseEntity.ok(agendamentoService.finalizar(id, status, observacao));
     }
 }
